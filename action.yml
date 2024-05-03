@@ -1,0 +1,118 @@
+name: gha-gitops-manifest-update
+
+inputs:
+  manifest-type:
+    type: string
+    description: e.g. pod, deployment, daemonset, etc...
+    default: deployment
+  registry:
+    type: string
+    description: e.g. ghcr.io, docker.io, xyz.azurecr.io
+    required: true
+  repository:
+    type: string
+    description: e.g. my-image-name
+    required: true
+  tag:
+    type: string
+    description: e.g. latest, latest-dev, 1.2.3
+    required: true
+  devcontainer-path:
+    type: string
+    description: e.g. .devcontainer/devcontainer.json
+    default: .devcontainer/devcontainer.json
+  yaml-deployment-path:
+    type: string
+    description: e.g. src/workloads/mydeployment.yaml
+    required: true
+  fullSemVer:
+    type: string
+    description: e.g. 1.2.3-feature-my-feature.12
+    required: true
+  repo-update-enabled:
+    type: boolean
+    description: If 'true' then skips the git operations entirely, e.g. demo mode.
+    default: true
+  git-user-name:
+    type: string
+    description: e.g. Tom Cruise
+    required: true
+  git-user-email:
+    type: string
+    description: e.g. tom@topgun.com
+    required: true
+  git-branch-name:
+    type: string
+    description: e.g. main
+    default: main
+
+runs:
+  using: composite
+  steps:
+
+    - name: setup yq (1 of 3)
+      shell: bash
+      run: |
+        FILE=${{ inputs.devcontainer-path }}
+        if [[ -f "$FILE" ]]; then
+          echo "$FILE exists"
+        else
+          echo "::error file=${{ inputs.devcontainer-path }}::yq version is managed by the devcontainer.json, '$FILE' is therefore required!"
+        fi
+
+    - name: setup yq (2 of 3) #pull version from devcontainer.json
+      shell: bash
+      run: |
+        npm install --global json5
+        json5 -c ${{ inputs.devcontainer-path }}
+        VERSION_TO_INSTALL=$(cat ${{ inputs.devcontainer-path }} | jq -r '.features[] | select(.yqVersion | . != null).yqVersion')
+        echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL" >> $GITHUB_ENV
+        echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL"
+
+    - name: setup yq (3 of 3)
+      shell: bash
+      run: |
+        sudo wget https://github.com/mikefarah/yq/releases/${{ env.VERSION_TO_INSTALL }}/download/yq_linux_amd64 -O /usr/bin/yq \
+          && sudo chmod +x /usr/bin/yq
+
+    - name: manipulate pod
+      if: inputs.manifest-type == "pod"
+      shell: bash
+      run: echo "todo"
+
+    - name: manipulate deployment
+      if: inputs.manifest-type == "deployment"
+      shell: bash
+      run: |
+        NEW_IMAGE="${{ inputs.registry }}/${{ inputs.repository }}:${{ inputs.tag }}"
+        echo "NEW_IMAGE=$NEW_IMAGE"
+        YAML_DEPLOYMENT_PATH=${{ inputs.yaml-deployment-path }}
+        echo "YAML_DEPLOYMENT_PATH=$YAML_DEPLOYMENT_PATH"
+
+        #update the image tag
+        IMAGE=$NEW_IMAGE yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").image=env(IMAGE) | ($deployment, $other)' $YAML_DEPLOYMENT_PATH
+
+        #update the GIT_TAG env variable so we can track a deployment of new image tagged with latest-dev
+        FULLSEMVER=${{ inputs.fullSemVer }}
+        FULLSEMVER=$FULLSEMVER yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "FULLSEMVER").value=env(FULLSEMVER) | ($deployment, $other)' $YAML_DEPLOYMENT_PATH
+
+        echo "view file;"
+        cat $YAML_DEPLOYMENT_PATH
+
+        #TODO: check the YAML file has actually changed, if it hasn't then don't attenpt repo update
+
+    - name: manipulate daemonset
+      if: inputs.manifest-type == "daemonset"
+      shell: bash
+      run: echo "todo"
+
+    - name: repo update
+      if: inputs.repo-update-enabled == "true"
+      shell: bash
+      run: |
+        git config --global user.email "${{ inputs.git-user-name }}"
+        git config --global user.name "${{ inputs.git-user-email }}"
+        git checkout ${{ inputs.git-branch-name }}
+        git add --all
+        git commit -m "bump '${{ inputs.repository }}' to '${{ inputs.tag }}'"
+        git push -v --progress

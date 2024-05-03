@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  workflow_dispatch:
+    inputs:
+      PublishPreview:
+        type: string
+        description: Publish preview branch?
+        required: true
+        default: "false"
+  push:
+    branches-ignore:
+      - "preview/**"
+    paths-ignore:
+      - .github/dependabot.yml
+      - LICENSE
+      - README.md
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  release:
+    uses: f2calv/gha-workflows/.github/workflows/gha-release-versioning.yml@v1
+    permissions:
+      contents: write
