@@ -76,12 +76,12 @@ runs:
           && sudo chmod +x /usr/bin/yq
 
     - name: manipulate pod
-      if: inputs.manifest-type == "pod"
+      if: inputs.manifest-type == 'pod'
       shell: bash
       run: echo "todo"
 
     - name: manipulate deployment
-      if: inputs.manifest-type == "deployment"
+      if: inputs.manifest-type == 'deployment'
       shell: bash
       run: |
         NEW_IMAGE="${{ inputs.registry }}/${{ inputs.repository }}:${{ inputs.tag }}"
@@ -102,12 +102,12 @@ runs:
         #TODO: check the YAML file has actually changed, if it hasn't then don't attenpt repo update
 
     - name: manipulate daemonset
-      if: inputs.manifest-type == "daemonset"
+      if: inputs.manifest-type == 'daemonset'
       shell: bash
       run: echo "todo"
 
     - name: repo update
-      if: inputs.repo-update-enabled == "true"
+      if: inputs.repo-update-enabled == 'true'
       shell: bash
       run: |
         git config --global user.email "${{ inputs.git-user-name }}"
