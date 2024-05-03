@@ -31,7 +31,7 @@ inputs:
     required: true
   repo-update-enabled:
     type: boolean
-    description: If 'true' then skips the git operations entirely, e.g. demo mode.
+    description: If 'false' then skips the git operations entirely, e.g. action runs in demo mode
     default: true
   git-user-name:
     type: string
