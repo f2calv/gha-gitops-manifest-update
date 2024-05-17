@@ -17,9 +17,9 @@ inputs:
     type: string
     description: e.g. .devcontainer/devcontainer.json
     default: .devcontainer/devcontainer.json
-  yaml-deployment-path:
+  manifest-path:
     type: string
-    description: e.g. src/workloads/deploy1.yaml
+    description: e.g. src/workloads
     required: true
   fullSemVer:
     type: string
@@ -76,7 +76,7 @@ runs:
       run: |
         NEW_IMAGE="${{ inputs.registry }}/${{ inputs.repository }}:${{ inputs.tag }}"
         echo "NEW_IMAGE=$NEW_IMAGE"
-        YAML_DEPLOYMENT_PATH=${{ inputs.yaml-deployment-path }}
+        YAML_DEPLOYMENT_PATH=${{ inputs.manifest-path }}
         echo "YAML_DEPLOYMENT_PATH=$YAML_DEPLOYMENT_PATH"
 
         #update the image tag
