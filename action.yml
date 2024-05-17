@@ -84,7 +84,7 @@ runs:
         do
           echo "now processing chart..."
           export CHART_NAME=$chartname                                             # e.g. authenticator
-          export MANIFEST_PATH=${{ inputs.manifest-path }}/$CHART_NAME.yaml           # e.g. src/workloads/authenticator.yaml
+          export MANIFEST_PATH=${{ inputs.manifest-path }}/$CHART_NAME.yaml        # e.g. src/workloads/authenticator.yaml
           export CHART_REPOSITORY=${{ inputs.chart-repository-prefix }}$CHART_NAME # e.g. cas/charts/authenticator
           export REGISTRY=${{ inputs.registry }}                                   # e.g. ghcr.io/f2calv
           export REPOSITORY=$REGISTRY/${{ inputs.repository-prefix }}$CHART_NAME   # e.g. ghcr.io/f2calv/cas/authenticator
@@ -97,6 +97,11 @@ runs:
           echo "REPOSITORY=$REPOSITORY"
           echo "TAG=$TAG"
           echo "IMAGE=$IMAGE"
+
+          if [ -f $MANIFEST_PATH ]; then
+             echo "::warning title=file $MANIFEST_PATH::File $MANIFEST_PATH does not exist!"
+             continue
+          fi
 
           #update the image tag
           yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").image=env(IMAGE) | ($deployment, $other)' $MANIFEST_PATH
