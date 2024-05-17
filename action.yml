@@ -1,17 +1,13 @@
 name: gha-gitops-manifest-update
 
 inputs:
-  manifest-type:
-    type: string
-    description: e.g. pod, deployment, daemonset, etc...
-    default: deployment
   registry:
     type: string
-    description: e.g. ghcr.io, docker.io, xyz.azurecr.io
+    description: e.g. ghcr.io/gh-user, xyz.azurecr.io or docker.io
     required: true
   repository:
     type: string
-    description: e.g. my-image-name
+    description: Accepts multiple deployment names when separated by a space e.g. deploy1 deploy2 deploy3
     required: true
   tag:
     type: string
@@ -23,7 +19,7 @@ inputs:
     default: .devcontainer/devcontainer.json
   yaml-deployment-path:
     type: string
-    description: e.g. src/workloads/mydeployment.yaml
+    description: e.g. src/workloads/deploy1.yaml
     required: true
   fullSemVer:
     type: string
@@ -75,13 +71,7 @@ runs:
         sudo wget https://github.com/mikefarah/yq/releases/${{ env.VERSION_TO_INSTALL }}/download/yq_linux_amd64 -O /usr/bin/yq \
           && sudo chmod +x /usr/bin/yq
 
-    - name: manipulate pod
-      if: inputs.manifest-type == 'pod'
-      shell: bash
-      run: echo "todo"
-
     - name: manipulate deployment
-      if: inputs.manifest-type == 'deployment'
       shell: bash
       run: |
         NEW_IMAGE="${{ inputs.registry }}/${{ inputs.repository }}:${{ inputs.tag }}"
@@ -100,11 +90,6 @@ runs:
         cat $YAML_DEPLOYMENT_PATH
 
         #TODO: check the YAML file has actually changed, if it hasn't then don't attenpt repo update
-
-    - name: manipulate daemonset
-      if: inputs.manifest-type == 'daemonset'
-      shell: bash
-      run: echo "todo"
 
     - name: repo update
       if: inputs.repo-update-enabled == 'true'
