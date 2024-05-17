@@ -33,7 +33,7 @@ inputs:
     type: string
     description: e.g. 1.2.3-feature-my-feature.12
     required: true
-  repo-update-enabled:
+  git-repository-push-enabled:
     type: boolean
     description: If 'false' then skips the git operations entirely, e.g. action runs in demo mode
     default: true
@@ -127,7 +127,7 @@ runs:
         done
 
     - name: repo update
-      if: inputs.repo-update-enabled == 'true'
+      if: inputs.git-repository-push-enabled == 'true'
       shell: bash
       run: |
         if [ -n "$(git status --porcelain)" ]; then
