@@ -89,6 +89,7 @@ runs:
           export REGISTRY=${{ inputs.registry }}                                   # e.g. ghcr.io/f2calv
           export REPOSITORY=$REGISTRY/${{ inputs.repository-prefix }}$CHART_NAME   # e.g. ghcr.io/f2calv/cas/authenticator
           export TAG=${{ inputs.tag }}                                             # e.g. 1.2.3
+          export IMAGE=$REPOSITORY:$TAG                                            # e.g. ghcr.io/f2calv/cas/authenticator:1.2.3
 
           echo "CHART_NAME=$CHART_NAME"
           echo "MANIFEST_PATH=$MANIFEST_PATH"
@@ -98,7 +99,7 @@ runs:
           echo "TAG=$TAG"
           echo "IMAGE=$IMAGE"
 
-          if [ -f $MANIFEST_PATH ]; then
+          if [ ! -f $MANIFEST_PATH ]; then
              echo "::warning title=file $MANIFEST_PATH::File $MANIFEST_PATH does not exist!"
              continue
           fi
