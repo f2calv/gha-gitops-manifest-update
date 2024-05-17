@@ -91,10 +91,10 @@ runs:
           MANIFESTS=(${{ inputs.manifest }})
           for manifestpath in "${MANIFESTS[@]}"
           do
-          
+
             echo "now processing chart..."
             export CHART_NAME=$chartname                                             # e.g. authenticator
-            export MANIFEST_PATH=$manifestpath/$CHART_NAME.yaml                      # e.g. src/workloads/authenticator.yaml
+            export MANIFEST_PATH=${{ inputs.manifest-path }}/$manifestpath.yaml      # e.g. src/workloads/authenticator.yaml
             export CHART_REPOSITORY=${{ inputs.chart-repository-prefix }}$CHART_NAME # e.g. cas/charts/authenticator
             export REGISTRY=${{ inputs.registry }}                                   # e.g. ghcr.io/f2calv
             export REPOSITORY=$REGISTRY/${{ inputs.repository-prefix }}$CHART_NAME   # e.g. ghcr.io/f2calv/cas/authenticator
