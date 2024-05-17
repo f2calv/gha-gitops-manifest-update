@@ -124,7 +124,6 @@ runs:
             cat $MANIFEST_PATH
 
             done
-
         done
 
     - name: repo update
