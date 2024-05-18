@@ -31,7 +31,7 @@ inputs:
     required: true
   fullSemVer:
     type: string
-    description: e.g. 1.2.3-feature-my-feature.12
+    description: e.g. 1.2.301-feature-my-feature.12
     required: true
   git-repository-push-enabled:
     type: boolean
