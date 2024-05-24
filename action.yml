@@ -58,7 +58,7 @@ runs:
       shell: bash
       run: |
         FILE=${{ inputs.devcontainer-path }}
-        if [[ -f '$FILE' ]]; then
+        if [[ -f "$FILE" ]]; then
           echo "$FILE exists"
         else
           echo "::error file=${{ inputs.devcontainer-path }}::yq version is managed by the devcontainer.json, '$FILE' is therefore required!"
