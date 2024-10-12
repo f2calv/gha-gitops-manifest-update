@@ -109,7 +109,7 @@ runs:
             echo "TAG=$TAG"
             echo "IMAGE=$IMAGE"
   
-            if [ ! -f $MANIFEST_PATH ]; then
+            if [[ ! -f $MANIFEST_PATH ]]; then
                echo "::warning title=file $MANIFEST_PATH::File $MANIFEST_PATH does not exist!"
                continue
             fi
@@ -130,7 +130,7 @@ runs:
       if: inputs.git-repository-push-enabled == 'true'
       shell: bash
       run: |
-        if [ -n "$(git status --porcelain)" ]; then
+        if [[ -n "$(git status --porcelain)" ]]; then
           git config --global user.email "${{ inputs.git-user-name }}"
           git config --global user.name "${{ inputs.git-user-email }}"
           git checkout ${{ inputs.git-branch-name }}
