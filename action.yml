@@ -101,9 +101,9 @@ runs:
           #update the image tag
           yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").image=env(IMAGE) | ($deployment, $other)' $MANIFEST_PATH
 
-          #update the GIT_TAG env variable so we can track a deployment of new image tagged with latest-dev
-          FULLSEMVER=${{ inputs.tag }}
-          FULLSEMVER=$FULLSEMVER yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "FULLSEMVER").value=env(FULLSEMVER) | ($deployment, $other)' $MANIFEST_PATH
+          #update the TAG env variable so we can track a deployment of a new image that has it's full sem ver tag overriden by tagged tag-override, e.g. latest-dev
+          TAG_VALUE=${{ inputs.tag }}
+          TAG_VALUE=$TAG_VALUE yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "TAG").value=env(TAG_VALUE) | ($deployment, $other)' $MANIFEST_PATH
 
           cat $MANIFEST_PATH
 
