@@ -1,4 +1,5 @@
 name: gha-gitops-manifest-update
+description: Updates image tags in gitops manifests and optionally pushes changes to the git repository.
 
 inputs:
   registry:
@@ -12,7 +13,7 @@ inputs:
   repository-prefix:
     type: string
     description: e.g. prefix/
-    required: true
+    default: ''
   tag:
     type: string
     description: e.g. latest, latest-dev, 1.2.3
@@ -39,12 +40,12 @@ inputs:
     default: true
   git-user-name:
     type: string
-    description: e.g. Tom Cruise
-    required: true
+    description: e.g. GitHub Actions Bot
+    default: GitHub Actions Bot
   git-user-email:
     type: string
-    description: e.g. tom@topgun.com
-    required: true
+    description: e.g. github-actions[bot]@users.noreply.github.com
+    default: github-actions[bot]@users.noreply.github.com
   git-branch-name:
     type: string
     description: e.g. main
@@ -62,6 +63,7 @@ runs:
           echo "$FILE exists"
         else
           echo "::error file=${{ inputs.devcontainer-path }}::yq version is managed by the devcontainer.json, '$FILE' is therefore required!"
+          exit 1
         fi
 
     - name: setup yq (2 of 3) #pull version from devcontainer.json
@@ -95,7 +97,7 @@ runs:
             echo "now processing chart..."
             export CHART_NAME=$chartname                                             # e.g. authenticator
             export MANIFEST_PATH=${{ inputs.manifest-path }}/$manifestpath.yaml      # e.g. src/workloads/authenticator.yaml
-            export CHART_REPOSITORY=${{ inputs.chart-repository-prefix }}$CHART_NAME # e.g. cas/charts/authenticator
+            export CHART_REPOSITORY=${{ inputs.repository-prefix }}$CHART_NAME # e.g. cas/charts/authenticator
             export REGISTRY=${{ inputs.registry }}                                   # e.g. ghcr.io/f2calv
             export REPOSITORY=$REGISTRY/${{ inputs.repository-prefix }}$CHART_NAME   # e.g. ghcr.io/f2calv/cas/authenticator
             export TAG=${{ inputs.tag }}                                             # e.g. 1.2.3
@@ -109,7 +111,7 @@ runs:
             echo "TAG=$TAG"
             echo "IMAGE=$IMAGE"
   
-            if [ ! -f $MANIFEST_PATH ]; then
+            if [[ ! -f $MANIFEST_PATH ]]; then
                echo "::warning title=file $MANIFEST_PATH::File $MANIFEST_PATH does not exist!"
                continue
             fi
@@ -130,9 +132,9 @@ runs:
       if: inputs.git-repository-push-enabled == 'true'
       shell: bash
       run: |
-        if [ -n "$(git status --porcelain)" ]; then
-          git config --global user.email "${{ inputs.git-user-name }}"
-          git config --global user.name "${{ inputs.git-user-email }}"
+        if [[ -n "$(git status --porcelain)" ]]; then
+          git config --global user.email "${{ inputs.git-user-email }}"
+          git config --global user.name "${{ inputs.git-user-name }}"
           git checkout ${{ inputs.git-branch-name }}
           git add --all
           git commit -m "bump '${{ inputs.repository }}' to '${{ inputs.tag }}'"
