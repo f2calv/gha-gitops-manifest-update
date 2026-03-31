@@ -18,13 +18,9 @@ inputs:
     type: string
     description: e.g. .devcontainer/devcontainer.json
     default: .devcontainer/devcontainer.json
-  manifest:
+  manifest-paths:
     type: string
-    description: Accepts multiple manifest names (without file extension) when separated by a space e.g. deploy1 deploy2 deploy3 (deploy1.yaml etc...)
-    required: true
-  manifest-path:
-    type: string
-    description: e.g. src/workloads
+    description: Space-separated YAML manifests which need to be updated e.g. src/workloads/manifest1.yaml src/workloads/manifest2.yaml
     required: true
   tag:
     type: string
@@ -80,48 +76,37 @@ runs:
     - name: manipulate deployment
       shell: bash
       run: |
-        echo "repositories=${{ inputs.image-repository }}"
-        REPOSITORIES=(${{ inputs.image-repository }})
-        for chartname in "${REPOSITORIES[@]}"
+        MANIFEST_PATHS=(${{ inputs.manifest-paths }})
+        for MANIFEST_PATH in "${MANIFEST_PATHS[@]}"
         do
 
-          echo "manifests=${{ inputs.manifest }}"
-          MANIFESTS=(${{ inputs.manifest }})
-          for manifestpath in "${MANIFESTS[@]}"
-          do
+          echo "now processing manifest..."
+          export MANIFEST_PATH=$MANIFEST_PATH                                        # e.g. src/workloads/authenticator.yaml
+          export REGISTRY=${{ inputs.image-registry }}                               # e.g. ghcr.io/f2calv
+          export REPOSITORY=$REGISTRY/${{ inputs.image-repository }}                  # e.g. ghcr.io/f2calv/authenticator
+          export TAG=${{ inputs.tag-override }}                                      # e.g. 1.2.3
+          export IMAGE=$REPOSITORY:$TAG                                              # e.g. ghcr.io/f2calv/authenticator:1.2.3
 
-            echo "now processing chart..."
-            export CHART_NAME=$chartname                                             # e.g. authenticator
-            export MANIFEST_PATH=${{ inputs.manifest-path }}/$manifestpath.yaml      # e.g. src/workloads/authenticator.yaml
-            export CHART_REPOSITORY=$CHART_NAME # e.g. cas/charts/authenticator
-            export REGISTRY=${{ inputs.image-registry }}                             # e.g. ghcr.io/f2calv
-            export REPOSITORY=$REGISTRY/$CHART_NAME                                  # e.g. ghcr.io/f2calv/authenticator
-            export TAG=${{ inputs.tag-override }}                                    # e.g. 1.2.3
-            export IMAGE=$REPOSITORY:$TAG                                            # e.g. ghcr.io/f2calv/cas/authenticator:1.2.3
-  
-            echo "CHART_NAME=$CHART_NAME"
-            echo "MANIFEST_PATH=$MANIFEST_PATH"
-            echo "CHART_REPOSITORY=$CHART_REPOSITORY"
-            echo "REGISTRY=$REGISTRY"
-            echo "REPOSITORY=$REPOSITORY"
-            echo "TAG=$TAG"
-            echo "IMAGE=$IMAGE"
-  
-            if [[ ! -f $MANIFEST_PATH ]]; then
-               echo "::warning title=file $MANIFEST_PATH::File $MANIFEST_PATH does not exist!"
-               continue
-            fi
-  
-            #update the image tag
-            yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").image=env(IMAGE) | ($deployment, $other)' $MANIFEST_PATH
-  
-            #update the GIT_TAG env variable so we can track a deployment of new image tagged with latest-dev
-            FULLSEMVER=${{ inputs.tag }}
-            FULLSEMVER=$FULLSEMVER yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "FULLSEMVER").value=env(FULLSEMVER) | ($deployment, $other)' $MANIFEST_PATH
-  
-            cat $MANIFEST_PATH
+          echo "MANIFEST_PATH=$MANIFEST_PATH"
+          echo "REGISTRY=$REGISTRY"
+          echo "REPOSITORY=$REPOSITORY"
+          echo "TAG=$TAG"
+          echo "IMAGE=$IMAGE"
 
-            done
+          if [[ ! -f $MANIFEST_PATH ]]; then
+             echo "::warning title=file $MANIFEST_PATH::File $MANIFEST_PATH does not exist!"
+             continue
+          fi
+
+          #update the image tag
+          yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").image=env(IMAGE) | ($deployment, $other)' $MANIFEST_PATH
+
+          #update the GIT_TAG env variable so we can track a deployment of new image tagged with latest-dev
+          FULLSEMVER=${{ inputs.tag }}
+          FULLSEMVER=$FULLSEMVER yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "FULLSEMVER").value=env(FULLSEMVER) | ($deployment, $other)' $MANIFEST_PATH
+
+          cat $MANIFEST_PATH
+
         done
 
     - name: repo update
