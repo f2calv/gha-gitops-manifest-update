@@ -18,8 +18,6 @@ steps:
     manifest: myapp
     manifest-path: src/workloads
     fullSemVer: 1.2.301-feature-my-feature.12
-    git-user-name: My Bot
-    git-user-email: bot@example.com
     git-repository-push-enabled: false
 
 # Complete usage example updates manifests and pushes to git.
@@ -32,8 +30,6 @@ steps:
     manifest: myapp
     manifest-path: src/workloads
     fullSemVer: 1.2.301-feature-my-feature.12
-    git-user-name: My Bot
-    git-user-email: bot@example.com
 ```
 
 This action is also available as a [reusable workflow](https://github.com/f2calv/gha-workflows/blob/main/.github/workflows/gha-gitops-manifest-update.yml).
@@ -51,6 +47,6 @@ This action is also available as a [reusable workflow](https://github.com/f2calv
 | `manifest-path` | string | ✅ | | Path to manifest directory e.g. `src/workloads` |
 | `fullSemVer` | string | ✅ | | Full semantic version e.g. `1.2.301-feature-my-feature.12` |
 | `git-repository-push-enabled` | boolean | | `true` | If `false` then skips git operations entirely (demo mode) |
-| `git-user-name` | string | ✅ | | Git commit author name e.g. `My Bot` |
-| `git-user-email` | string | ✅ | | Git commit author email e.g. `bot@example.com` |
+| `git-user-name` | string | | `GitHub Actions Bot` | Git commit author name |
+| `git-user-email` | string | | `github-actions[bot]@users.noreply.github.com` | Git commit author email |
 | `git-branch-name` | string | | `main` | Branch to commit and push to |

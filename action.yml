@@ -40,12 +40,12 @@ inputs:
     default: true
   git-user-name:
     type: string
-    description: e.g. Tom Cruise
-    required: true
+    description: e.g. GitHub Actions Bot
+    default: GitHub Actions Bot
   git-user-email:
     type: string
-    description: e.g. tom@topgun.com
-    required: true
+    description: e.g. github-actions[bot]@users.noreply.github.com
+    default: github-actions[bot]@users.noreply.github.com
   git-branch-name:
     type: string
     description: e.g. main
