@@ -1,6 +1,6 @@
 # GitHub Action: GitOps Manifest Update
 
-This GitHub Action updates image tags in GitOps YAML manifests (Kubernetes `Deployment` resources) and pushes the changes back to the source repository. It uses [yq](https://github.com/mikefarah/yq) to manipulate the manifest YAML in-place, setting the container image and `FULLSEMVER` environment variable (from `tag`) on containers named `primary`.
+This GitHub Action updates image tags in GitOps YAML manifests (Kubernetes `Deployment` resources) and pushes the changes back to the source repository. It uses [yq](https://github.com/mikefarah/yq) to manipulate the manifest YAML in-place, setting the container image and `TAG` environment variable on containers named `primary`.
 
 The yq version is sourced from `.devcontainer/devcontainer.json` by default.
 

@@ -84,13 +84,15 @@ runs:
           export MANIFEST_PATH=$MANIFEST_PATH                                        # e.g. src/workloads/authenticator.yaml
           export REGISTRY=${{ inputs.image-registry }}                               # e.g. ghcr.io/f2calv
           export REPOSITORY=$REGISTRY/${{ inputs.image-repository }}                 # e.g. ghcr.io/f2calv/authenticator
-          export TAG=${{ inputs.tag-override }}                                      # e.g. 1.2.3
-          export IMAGE=$REPOSITORY:$TAG                                              # e.g. ghcr.io/f2calv/authenticator:1.2.3
+          export TAG=${{ inputs.tag }}                                               # e.g. 1.2.301-feature-my-feature.12
+          export TAG_OVERRIDE=${{ inputs.tag-override }}                             # e.g. latest, latest-dev, 1.2.3
+          export IMAGE=$REPOSITORY:$TAG_OVERRIDE                                     # e.g. ghcr.io/f2calv/authenticator:1.2.3
 
           echo "MANIFEST_PATH=$MANIFEST_PATH"
           echo "REGISTRY=$REGISTRY"
           echo "REPOSITORY=$REPOSITORY"
           echo "TAG=$TAG"
+          echo "TAG_OVERRIDE=$TAG_OVERRIDE"
           echo "IMAGE=$IMAGE"
 
           if [[ ! -f $MANIFEST_PATH ]]; then
@@ -102,8 +104,7 @@ runs:
           yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").image=env(IMAGE) | ($deployment, $other)' $MANIFEST_PATH
 
           #update the TAG env variable so we can track a deployment of a new image that has it's full sem ver tag overriden by tagged tag-override, e.g. latest-dev
-          TAG_VALUE=${{ inputs.tag }}
-          TAG_VALUE=$TAG_VALUE yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "TAG").value=env(TAG_VALUE) | ($deployment, $other)' $MANIFEST_PATH
+          yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "TAG").value=env(TAG) | ($deployment, $other)' $MANIFEST_PATH
 
           cat $MANIFEST_PATH
 
@@ -114,11 +115,11 @@ runs:
       shell: bash
       run: |
         if [[ -n "$(git status --porcelain)" ]]; then
-          git config --global user.email "${{ inputs.git-user-email }}"
           git config --global user.name "${{ inputs.git-user-name }}"
+          git config --global user.email "${{ inputs.git-user-email }}"
           git checkout ${{ inputs.git-branch-name }}
           git add --all
-          git commit -m "bump '${{ inputs.image-repository }}' to '${{ inputs.tag-override }}'"
+          git commit -m "bump '${{ inputs.image-repository }}' to '${{ inputs.tag }}'"
           git push -v --progress
         else
           echo "::warning title=git push::No changes to push."
