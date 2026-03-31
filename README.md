@@ -12,20 +12,19 @@ steps:
 # Minimal usage example updates manifests but does not push.
 - uses: f2calv/gha-gitops-manifest-update@v1
   with:
-    registry: ghcr.io/f2calv
-    repository: myapp
+    image-registry: ghcr.io/f2calv
+    image-repository: myapp
     tag: 1.2.3
     manifest: myapp
     manifest-path: src/workloads
     fullSemVer: 1.2.301-feature-my-feature.12
-    git-repository-push-enabled: false
+    git-repo-update: false
 
 # Complete usage example updates manifests and pushes to git.
 - uses: f2calv/gha-gitops-manifest-update@v1
   with:
-    registry: ghcr.io/f2calv
-    repository: myapp
-    repository-prefix: cas/
+    image-registry: ghcr.io/f2calv
+    image-repository: prefix/myapp
     tag: 1.2.3
     manifest: myapp
     manifest-path: src/workloads
@@ -38,15 +37,14 @@ This action is also available as a [reusable workflow](https://github.com/f2calv
 
 | Input | Type | Required | Default | Description |
 | ----- | ---- | -------- | ------- | ----------- |
-| `registry` | string | ✅ | | Container registry e.g. `ghcr.io/gh-user`, `xyz.azurecr.io` or `docker.io` |
-| `repository` | string | ✅ | | Deployment name(s). Accepts multiple values separated by a space e.g. `deploy1 deploy2 deploy3` |
-| `repository-prefix` | string | | `''` | Repository prefix e.g. `prefix/` |
+| `image-registry` | string | ✅ | | Container registry e.g. `ghcr.io/gh-user`, `xyz.azurecr.io` or `docker.io` |
+| `image-repository` | string | ✅ | | Image repository e.g. `[optional-prefix/]myimage` |
 | `tag` | string | ✅ | | Image tag e.g. `latest`, `latest-dev`, `1.2.3` |
 | `devcontainer-path` | string | | `.devcontainer/devcontainer.json` | Path to `devcontainer.json` used to resolve yq version |
 | `manifest` | string | ✅ | | Manifest name(s) without file extension. Accepts multiple values separated by a space e.g. `deploy1 deploy2 deploy3` |
 | `manifest-path` | string | ✅ | | Path to manifest directory e.g. `src/workloads` |
 | `fullSemVer` | string | ✅ | | Full semantic version e.g. `1.2.301-feature-my-feature.12` |
-| `git-repository-push-enabled` | boolean | | `true` | If `false` then skips git operations entirely (demo mode) |
+| `git-repo-update` | boolean | | `true` | If `false` then skips git operations entirely (demo mode) |
 | `git-user-name` | string | | `GitHub Actions Bot` | Git commit author name |
 | `git-user-email` | string | | `github-actions[bot]@users.noreply.github.com` | Git commit author email |
 | `git-branch-name` | string | | `main` | Branch to commit and push to |

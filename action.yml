@@ -2,18 +2,14 @@ name: gha-gitops-manifest-update
 description: Updates image tags in gitops manifests and optionally pushes changes to the git repository.
 
 inputs:
-  registry:
+  image-registry:
     type: string
     description: e.g. ghcr.io/gh-user, xyz.azurecr.io or docker.io
     required: true
-  repository:
+  image-repository:
     type: string
-    description: Accepts multiple deployment names when separated by a space e.g. deploy1 deploy2 deploy3
+    description: e.g. [optional-prefix/]myimage
     required: true
-  repository-prefix:
-    type: string
-    description: e.g. prefix/
-    default: ''
   tag:
     type: string
     description: e.g. latest, latest-dev, 1.2.3
@@ -34,7 +30,7 @@ inputs:
     type: string
     description: e.g. 1.2.301-feature-my-feature.12
     required: true
-  git-repository-push-enabled:
+  git-repo-update:
     type: boolean
     description: If 'false' then skips the git operations entirely, e.g. action runs in demo mode
     default: true
@@ -84,8 +80,8 @@ runs:
     - name: manipulate deployment
       shell: bash
       run: |
-        echo "repositories=${{ inputs.repository }}"
-        REPOSITORIES=(${{ inputs.repository }})
+        echo "repositories=${{ inputs.image-repository }}"
+        REPOSITORIES=(${{ inputs.image-repository }})
         for chartname in "${REPOSITORIES[@]}"
         do
 
@@ -97,9 +93,9 @@ runs:
             echo "now processing chart..."
             export CHART_NAME=$chartname                                             # e.g. authenticator
             export MANIFEST_PATH=${{ inputs.manifest-path }}/$manifestpath.yaml      # e.g. src/workloads/authenticator.yaml
-            export CHART_REPOSITORY=${{ inputs.repository-prefix }}$CHART_NAME # e.g. cas/charts/authenticator
-            export REGISTRY=${{ inputs.registry }}                                   # e.g. ghcr.io/f2calv
-            export REPOSITORY=$REGISTRY/${{ inputs.repository-prefix }}$CHART_NAME   # e.g. ghcr.io/f2calv/cas/authenticator
+            export CHART_REPOSITORY=$CHART_NAME # e.g. cas/charts/authenticator
+            export REGISTRY=${{ inputs.image-registry }}                             # e.g. ghcr.io/f2calv
+            export REPOSITORY=$REGISTRY/$CHART_NAME                                  # e.g. ghcr.io/f2calv/authenticator
             export TAG=${{ inputs.tag }}                                             # e.g. 1.2.3
             export IMAGE=$REPOSITORY:$TAG                                            # e.g. ghcr.io/f2calv/cas/authenticator:1.2.3
   
@@ -129,7 +125,7 @@ runs:
         done
 
     - name: repo update
-      if: inputs.git-repository-push-enabled == 'true'
+      if: inputs.git-repo-update == 'true'
       shell: bash
       run: |
         if [[ -n "$(git status --porcelain)" ]]; then
@@ -137,7 +133,7 @@ runs:
           git config --global user.name "${{ inputs.git-user-name }}"
           git checkout ${{ inputs.git-branch-name }}
           git add --all
-          git commit -m "bump '${{ inputs.repository }}' to '${{ inputs.tag }}'"
+          git commit -m "bump '${{ inputs.image-repository }}' to '${{ inputs.tag }}'"
           git push -v --progress
         else
           echo "::warning title=git push::No changes to push."
