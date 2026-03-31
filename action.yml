@@ -83,7 +83,7 @@ runs:
           echo "now processing manifest..."
           export MANIFEST_PATH=$MANIFEST_PATH                                        # e.g. src/workloads/authenticator.yaml
           export REGISTRY=${{ inputs.image-registry }}                               # e.g. ghcr.io/f2calv
-          export REPOSITORY=$REGISTRY/${{ inputs.image-repository }}                  # e.g. ghcr.io/f2calv/authenticator
+          export REPOSITORY=$REGISTRY/${{ inputs.image-repository }}                 # e.g. ghcr.io/f2calv/authenticator
           export TAG=${{ inputs.tag-override }}                                      # e.g. 1.2.3
           export IMAGE=$REPOSITORY:$TAG                                              # e.g. ghcr.io/f2calv/authenticator:1.2.3
 
