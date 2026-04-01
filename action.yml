@@ -1,40 +1,50 @@
 name: gha-gitops-manifest-update
-description: Updates image tags in gitops manifests and optionally pushes changes to the git repository.
+description: Iterates over YAML manifests (Kubernetes Deployment or ArgoCD Application) and updates their image/tag - also renders manifests.
 
 inputs:
-  registry:
+  #image
+  tag:
+    type: string
+    description: e.g. 1.2.3, 1.2.3-branch-name.12
+    required: true
+  tag-override:
+    type: string
+    description: e.g. latest, latest-dev
+  image-registry:
     type: string
     description: e.g. ghcr.io/gh-user, xyz.azurecr.io or docker.io
     required: true
-  repository:
+  image-repository:
     type: string
-    description: Accepts multiple deployment names when separated by a space e.g. deploy1 deploy2 deploy3
+    description: e.g. [optional-prefix/]myimage
     required: true
-  repository-prefix:
+  #chart
+  chart-registry:
     type: string
-    description: e.g. prefix/
-    default: ''
-  tag:
+    description: e.g. ghcr.io/gh-user, xyz.azurecr.io or docker.io
+  chart-registry-username:
     type: string
-    description: e.g. latest, latest-dev, 1.2.3
+  chart-registry-password:
+    type: string
+  chart-repository:
+    type: string
+    description: e.g. [optional-prefix/]charts/myname
+  #manifest
+  manifest-paths:
+    type: string
+    description: Space-separated YAML manifests which need to be updated e.g. src/workloads/manifest1.yaml src/workloads/manifest2.yaml
     required: true
+  namespace:
+    type: string
+    description: Destination Kubernetes namespace for the application.
+    required: true
+  #tooling
   devcontainer-path:
     type: string
     description: e.g. .devcontainer/devcontainer.json
     default: .devcontainer/devcontainer.json
-  manifest:
-    type: string
-    description: Accepts multiple manifest names (without file extension) when separated by a space e.g. deploy1 deploy2 deploy3 (deploy1.yaml etc...)
-    required: true
-  manifest-path:
-    type: string
-    description: e.g. src/workloads
-    required: true
-  fullSemVer:
-    type: string
-    description: e.g. 1.2.301-feature-my-feature.12
-    required: true
-  git-repository-push-enabled:
+  #git
+  git-repo-update:
     type: boolean
     description: If 'false' then skips the git operations entirely, e.g. action runs in demo mode
     default: true
@@ -50,6 +60,10 @@ inputs:
     type: string
     description: e.g. main
     default: main
+  git-working-directory:
+    type: string
+    description: Working directory for git operations e.g. gitops/
+    default: .
 
 runs:
   using: composite
@@ -58,20 +72,27 @@ runs:
     - name: setup yq (1 of 3)
       shell: bash
       run: |
-        FILE=${{ inputs.devcontainer-path }}
+        GIT_DIR="${{ inputs.git-working-directory }}"
+        GIT_DIR="${GIT_DIR%/}"
+        if [[ "$GIT_DIR" != "." ]]; then
+          FILE="$GIT_DIR/${{ inputs.devcontainer-path }}"
+        else
+          FILE="${{ inputs.devcontainer-path }}"
+        fi
         if [[ -f "$FILE" ]]; then
           echo "$FILE exists"
         else
-          echo "::error file=${{ inputs.devcontainer-path }}::yq version is managed by the devcontainer.json, '$FILE' is therefore required!"
+          echo "::error file=$FILE::yq version is managed by the devcontainer.json, '$FILE' is therefore required!"
           exit 1
         fi
+        echo "DEVCONTAINER_PATH=$FILE" >> $GITHUB_ENV
 
     - name: setup yq (2 of 3) #pull version from devcontainer.json
       shell: bash
       run: |
         npm install --global json5
-        json5 -c ${{ inputs.devcontainer-path }}
-        VERSION_TO_INSTALL=$(cat ${{ inputs.devcontainer-path }} | jq -r '.features[] | select(.yqVersion | . != null).yqVersion')
+        json5 -c ${{ env.DEVCONTAINER_PATH }}
+        VERSION_TO_INSTALL=$(cat ${{ env.DEVCONTAINER_PATH }} | jq -r '.features[] | select(.yqVersion | . != null).yqVersion')
         echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL" >> $GITHUB_ENV
         echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL"
 
@@ -81,63 +102,154 @@ runs:
         sudo wget https://github.com/mikefarah/yq/releases/${{ env.VERSION_TO_INSTALL }}/download/yq_linux_amd64 -O /usr/bin/yq \
           && sudo chmod +x /usr/bin/yq
 
-    - name: manipulate deployment
+    - name: setup helm (1 of 2) #pull version from devcontainer.json
       shell: bash
       run: |
-        echo "repositories=${{ inputs.repository }}"
-        REPOSITORIES=(${{ inputs.repository }})
-        for chartname in "${REPOSITORIES[@]}"
+        HELM_VERSION=$(cat ${{ env.DEVCONTAINER_PATH }} | jq -r '.features[] | select(.helm | . != null).helm')
+        echo "HELM_VERSION=$HELM_VERSION" >> $GITHUB_ENV
+        echo "HELM_VERSION=$HELM_VERSION"
+
+    - name: setup helm (2 of 2)
+      uses: azure/setup-helm@v5
+      with:
+        version: ${{ env.HELM_VERSION }}
+
+    #1. update the argocd application targetRevision to reflect the new helm chart version
+    #2. expand out the helm chart with new helm chart version (optional)
+    - run: |
+        #prefix manifest paths with git-working-directory if not '.'
+        GIT_DIR="${{ inputs.git-working-directory }}"
+        GIT_DIR="${GIT_DIR%/}"
+        RAW_PATHS="${{ inputs.manifest-paths }}"
+        MANIFEST_PATHS=""
+        for p in $RAW_PATHS; do
+          if [[ "$GIT_DIR" != "." ]]; then
+            MANIFEST_PATHS="$MANIFEST_PATHS $GIT_DIR/$p"
+          else
+            MANIFEST_PATHS="$MANIFEST_PATHS $p"
+          fi
+        done
+        MANIFEST_PATHS="${MANIFEST_PATHS# }"
+        printf "MANIFEST_PATHS=$MANIFEST_PATHS\n"
+        arr=($MANIFEST_PATHS)
+        for MANIFEST_PATH in "${arr[@]}"
         do
+          printf "\n-------------------------------------------"
 
-          echo "manifests=${{ inputs.manifest }}"
-          MANIFESTS=(${{ inputs.manifest }})
-          for manifestpath in "${MANIFESTS[@]}"
-          do
+          printf "\nMANIFEST_PATH=$MANIFEST_PATH"                                           # e.g. src/workloads/tickprocessor.yaml
+          if [[ ! -f $MANIFEST_PATH ]]; then
+              echo "::warning title=file $MANIFEST_PATH::File $MANIFEST_PATH does not exist!"
+              continue
+          fi
 
-            echo "now processing chart..."
-            export CHART_NAME=$chartname                                             # e.g. authenticator
-            export MANIFEST_PATH=${{ inputs.manifest-path }}/$manifestpath.yaml      # e.g. src/workloads/authenticator.yaml
-            export CHART_REPOSITORY=${{ inputs.repository-prefix }}$CHART_NAME # e.g. cas/charts/authenticator
-            export REGISTRY=${{ inputs.registry }}                                   # e.g. ghcr.io/f2calv
-            export REPOSITORY=$REGISTRY/${{ inputs.repository-prefix }}$CHART_NAME   # e.g. ghcr.io/f2calv/cas/authenticator
-            export TAG=${{ inputs.tag }}                                             # e.g. 1.2.3
-            export IMAGE=$REPOSITORY:$TAG                                            # e.g. ghcr.io/f2calv/cas/authenticator:1.2.3
-  
-            echo "CHART_NAME=$CHART_NAME"
-            echo "MANIFEST_PATH=$MANIFEST_PATH"
-            echo "CHART_REPOSITORY=$CHART_REPOSITORY"
-            echo "REGISTRY=$REGISTRY"
-            echo "REPOSITORY=$REPOSITORY"
-            echo "TAG=$TAG"
-            echo "IMAGE=$IMAGE"
-  
-            if [[ ! -f $MANIFEST_PATH ]]; then
-               echo "::warning title=file $MANIFEST_PATH::File $MANIFEST_PATH does not exist!"
-               continue
-            fi
-  
-            #update the image tag
-            yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").image=env(IMAGE) | ($deployment, $other)' $MANIFEST_PATH
-  
-            #update the GIT_TAG env variable so we can track a deployment of new image tagged with latest-dev
-            FULLSEMVER=${{ inputs.fullSemVer }}
-            FULLSEMVER=$FULLSEMVER yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "FULLSEMVER").value=env(FULLSEMVER) | ($deployment, $other)' $MANIFEST_PATH
-  
+          #force to lowercase
+          IMAGE_REGISTRY=${{ inputs.image-registry }}
+          IMAGE_REGISTRY=${IMAGE_REGISTRY,,}
+          IMAGE_REPOSITORY=${{ inputs.image-repository }}
+          IMAGE_REPOSITORY=${IMAGE_REPOSITORY,,}
+          CHART_REGISTRY=${{ inputs.chart-registry }}
+          CHART_REGISTRY=${CHART_REGISTRY,,}
+          CHART_REPOSITORY=${{ inputs.chart-repository }}
+          CHART_REPOSITORY=${CHART_REPOSITORY,,}
+
+          export TAG=${{ inputs.tag }}                                                      # e.g. 1.2.3
+          export TAG_OVERRIDE=${{ inputs.tag-override }}                                    # e.g. latest, latest-dev
+          export IMAGE_REGISTRY=$IMAGE_REGISTRY                                             # e.g. ghcr.io
+          export IMAGE_REPOSITORY=$IMAGE_REPOSITORY                                         # e.g. username/imagename
+          export CHART_REGISTRY=$CHART_REGISTRY                                             # e.g. ghcr.io
+          export CHART_REGISTRY_USERNAME=${{ inputs.chart-registry-username }}              # e.g. username
+          export CHART_REGISTRY_PASSWORD=${{ inputs.chart-registry-password }}              # its a secret!
+          export CHART_REPOSITORY=$CHART_REPOSITORY                                         # e.g. f2calv/cas/charts/tickprocessor
+          export CHART_NAME=$(basename $CHART_REPOSITORY)                                   # e.g. tickprocessor
+          export NAMESPACE=${{ inputs.namespace }}                                          # e.g. dev, tst, prd, etc...
+          export MANIFEST_PATH_RENDERED="$MANIFEST_PATH.manifest"                           # e.g. src/workloads/tickprocessor.yaml.manifest
+
+          #custom variables derived from inputs
+          export IMAGE_PREFIX=$IMAGE_REGISTRY/$IMAGE_REPOSITORY                             # e.g. ghcr.io/username/imagename
+          if [[ -z "$TAG_OVERRIDE" ]]; then
+            export IMAGE=$IMAGE_PREFIX:$TAG                                                 # e.g. ghcr.io/username/imagename:1.2.3
+          else
+            export IMAGE=$IMAGE_PREFIX:$TAG_OVERRIDE                                        # e.g. ghcr.io/username/imagename:latest-dev
+          fi
+
+          printf "\nIMAGE_REGISTRY=$IMAGE_REGISTRY"
+          printf "\nIMAGE_REPOSITORY=$IMAGE_REPOSITORY"
+          printf "\nTAG=$TAG"
+          printf "\nTAG_OVERRIDE=$TAG_OVERRIDE"
+          printf "\nIMAGE=$IMAGE"
+          printf "\nNAMESPACE=$NAMESPACE"
+          printf "\n-------------------------------------------"
+
+          KIND=$(yq '.kind' $MANIFEST_PATH)
+          #TODO: also validate that the key variables below are not empty for helm charts
+          if [[ "$KIND" == "Application" ]]; then
+            #we are updating an ArgoCD application manifest
+
+            printf "\nCHART_REGISTRY=$CHART_REGISTRY"
+            printf "\nCHART_REGISTRY_USERNAME=$CHART_REGISTRY_USERNAME"
+            printf "\nCHART_REGISTRY_PASSWORD=***" #Note: value redacted from logs to avoid leaking credentials
+            printf "\nCHART_REPOSITORY=$CHART_REPOSITORY"
+            printf "\nCHART_NAME=$CHART_NAME"
+            printf "\nMANIFEST_PATH_RENDERED=$MANIFEST_PATH_RENDERED"
+            printf "\n-------------------------------------------\n"
+
+            #yq -i '.metadata.name=env(CHART_NAME)' $MANIFEST_PATH
+
+            yq -i '.spec.destination.namespace=env(NAMESPACE)' $MANIFEST_PATH
+            yq -i '.spec.source.repoURL=env(CHART_REGISTRY)' $MANIFEST_PATH
+            yq -i '.spec.source.chart=env(CHART_REPOSITORY)' $MANIFEST_PATH
+            yq -i '.spec.source.targetRevision=env(TAG)' $MANIFEST_PATH
+
+            # yq -i '.spec.source.helm.parameters[] |= select(.name == "image.repository").value=env(CHART_REPOSITORY)' $MANIFEST_PATH
+            # yq -i '.spec.source.helm.parameters[] |= select(.name == "image.tag").value=env(TAG)' $MANIFEST_PATH
+
             cat $MANIFEST_PATH
 
-            done
+            yq '.spec.source.helm.valuesObject' $MANIFEST_PATH >> temp.values.yaml
+
+            printf "\n\n>helm registry login $CHART_REGISTRY --username $CHART_REGISTRY_USERNAME --password-stdin\n"
+            printf $CHART_REGISTRY_PASSWORD | helm registry login $CHART_REGISTRY --username $CHART_REGISTRY_USERNAME --password-stdin
+
+            printf "\n\n>helm pull oci://$CHART_REGISTRY/$CHART_REPOSITORY --version $TAG --untar\n"
+            helm pull oci://$CHART_REGISTRY/$CHART_REPOSITORY --version $TAG --untar --destination temp-charts
+
+            printf "\n\n>helm template --namespace $NAMESPACE $CHART_NAME $CHART_REPOSITORY --values temp.values.yaml > $MANIFEST_PATH_RENDERED\n"
+            helm template --namespace $NAMESPACE $CHART_NAME temp-charts/$CHART_NAME --values temp.values.yaml > $MANIFEST_PATH_RENDERED
+
+            cat $MANIFEST_PATH_RENDERED
+
+            #we are in a loop so do some clean up
+            rm -rf temp.values.yaml
+            rm -rf temp-charts
+          else
+            #we are updating a regular kubernetes manifest
+
+            #update the image repository
+            yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").image=env(IMAGE) | ($deployment, $other)' $MANIFEST_PATH
+
+            #update the TAG env variable so we can track a deployment of a new image that has it's full sem ver tag overriden by tagged tag-override, e.g. latest-dev
+            yq -i '. | select(.kind == "Deployment") as $deployment | select(.kind != "Deployment") as $other | $deployment.spec.template.spec.containers[] |= select(.name == "primary").env[] |= select(.name == "TAG").value=env(TAG) | ($deployment, $other)' $MANIFEST_PATH
+
+            #update all namespaces
+            yq -i '.metadata.namespace=env(NAMESPACE)' $MANIFEST_PATH
+
+            cat $MANIFEST_PATH
+          fi
+
         done
+      shell: bash
 
     - name: repo update
-      if: inputs.git-repository-push-enabled == 'true'
+      if: inputs.git-repo-update == 'true'
       shell: bash
       run: |
+        cd ${{ inputs.git-working-directory }}
         if [[ -n "$(git status --porcelain)" ]]; then
-          git config --global user.email "${{ inputs.git-user-email }}"
           git config --global user.name "${{ inputs.git-user-name }}"
+          git config --global user.email "${{ inputs.git-user-email }}"
           git checkout ${{ inputs.git-branch-name }}
           git add --all
-          git commit -m "bump '${{ inputs.repository }}' to '${{ inputs.tag }}'"
+          git commit -m "[${{ inputs.namespace }}] bump '${{ inputs.image-repository }}' to '${{ inputs.tag }}'"
           git push -v --progress
         else
           echo "::warning title=git push::No changes to push."

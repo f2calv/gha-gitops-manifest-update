@@ -1,5 +1,5 @@
 ---
-description: "Create a temporary markdown file summarising all branch changes vs. master for PR review"
+description: "Create a temporary markdown file summarising all branch changes vs. main/master for PR review"
 agent: "agent"
 ---
 
