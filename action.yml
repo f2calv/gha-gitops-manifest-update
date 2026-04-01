@@ -72,20 +72,27 @@ runs:
     - name: setup yq (1 of 3)
       shell: bash
       run: |
-        FILE=${{ inputs.devcontainer-path }}
+        GIT_DIR="${{ inputs.git-working-directory }}"
+        GIT_DIR="${GIT_DIR%/}"
+        if [[ "$GIT_DIR" != "." ]]; then
+          FILE="$GIT_DIR/${{ inputs.devcontainer-path }}"
+        else
+          FILE="${{ inputs.devcontainer-path }}"
+        fi
         if [[ -f "$FILE" ]]; then
           echo "$FILE exists"
         else
-          echo "::error file=${{ inputs.devcontainer-path }}::yq version is managed by the devcontainer.json, '$FILE' is therefore required!"
+          echo "::error file=$FILE::yq version is managed by the devcontainer.json, '$FILE' is therefore required!"
           exit 1
         fi
+        echo "DEVCONTAINER_PATH=$FILE" >> $GITHUB_ENV
 
     - name: setup yq (2 of 3) #pull version from devcontainer.json
       shell: bash
       run: |
         npm install --global json5
-        json5 -c ${{ inputs.devcontainer-path }}
-        VERSION_TO_INSTALL=$(cat ${{ inputs.devcontainer-path }} | jq -r '.features[] | select(.yqVersion | . != null).yqVersion')
+        json5 -c ${{ env.DEVCONTAINER_PATH }}
+        VERSION_TO_INSTALL=$(cat ${{ env.DEVCONTAINER_PATH }} | jq -r '.features[] | select(.yqVersion | . != null).yqVersion')
         echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL" >> $GITHUB_ENV
         echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL"
 
@@ -98,7 +105,7 @@ runs:
     - name: setup helm (1 of 2) #pull version from devcontainer.json
       shell: bash
       run: |
-        HELM_VERSION=$(cat ${{ inputs.devcontainer-path }} | jq -r '.features[] | select(.helm | . != null).helm')
+        HELM_VERSION=$(cat ${{ env.DEVCONTAINER_PATH }} | jq -r '.features[] | select(.helm | . != null).helm')
         echo "HELM_VERSION=$HELM_VERSION" >> $GITHUB_ENV
         echo "HELM_VERSION=$HELM_VERSION"
 
