@@ -1,5 +1,10 @@
 # Copilot Instructions
 
+<!-- ── Synced section ─────────────────────────────────────────────────────
+     Everything above the "Project-Specific Overrides" heading is kept
+     identical across all f2calv repositories. Edit once, sync everywhere.
+     ──────────────────────────────────────────────────────────────────── -->
+
 ## GitHub Actions
 
 ### General
@@ -102,8 +107,16 @@ Use these consistent heading patterns before Mermaid diagrams:
 
 ## Copilot Workflow
 
+- **Test execution**: Never run tests automatically — they may be integration tests requiring extra setup. Always prompt (ideally with a visual yes/no button) before running any tests.
 - **Preserve git history during renames/moves**: When renaming or relocating files, first perform the rename/move (preferably via `git mv`), then make content edits to the file in its new location/name. This two-step approach preserves git history across the rename. Do not delete-and-recreate files when a rename or move is the intent.
 
 ## Misc
 
 - When detecting new conventions or patterns in the codebase, add them to this document and apply them retroactively where applicable.
+- When multiple `copilot-instructions.md` files are available in the workspace, keep them in sync based on the common guidelines in the synced section.
+
+---
+
+## Project-Specific Overrides
+
+<!-- This section is excluded from cross-repository sync. Place any repo-specific rules below. -->
