@@ -1,6 +1,6 @@
 # GitHub Action: GitOps Manifest Update
 
-This GitHub Action iterates over YAML manifests (Kubernetes `Deployment` or ArgoCD `Application`) and updates their image/tag. For ArgoCD `Application` manifests it also pulls and renders Helm charts. It uses [yq](https://github.com/mikefarah/yq) to manipulate manifest YAML in-place and [Helm](https://helm.sh/) for chart operations. Tool versions are sourced from `.devcontainer/devcontainer.json` by default.
+This GitHub Action iterates over YAML manifests (Kubernetes `Deployment`, ArgoCD `Application`, or ArgoCD `ApplicationSet`) and updates their image/tag. For ArgoCD `Application` and `ApplicationSet` manifests it also pulls and renders Helm charts. It uses [yq](https://github.com/mikefarah/yq) to manipulate manifest YAML in-place and [Helm](https://helm.sh/) for chart operations. Tool versions are sourced from `.devcontainer/devcontainer.json` by default.
 
 ## Examples
 
@@ -28,6 +28,21 @@ steps:
     git-repo-update: false
 
 # ArgoCD Application: updates targetRevision, pulls and renders Helm chart.
+- uses: f2calv/gha-gitops-manifest-update@v2
+  with:
+    tag: 1.2.3
+    image-registry: ghcr.io/f2calv
+    image-repository: myapp
+    chart-registry: ghcr.io/f2calv
+    chart-registry-username: f2calv
+    chart-registry-password: ${{ secrets.GITHUB_TOKEN }}
+    chart-repository: charts/myapp
+    manifest-paths: src/workloads/myapp.yaml
+    namespace: prd
+    git-working-directory: gitops/
+
+# ArgoCD ApplicationSet: updates targetRevision under .spec.template.spec.
+# Namespace is not overwritten because each generator element defines its own.
 - uses: f2calv/gha-gitops-manifest-update@v2
   with:
     tag: 1.2.3
@@ -86,3 +101,13 @@ This action is also available as a [reusable workflow](https://github.com/f2calv
 | `git-user-email` | string | | `github-actions[bot]@users.noreply.github.com` | Git commit author email |
 | `git-branch-name` | string | | `main` | Branch to commit and push to |
 | `git-working-directory` | string | | `.` | Working directory for git operations e.g. `gitops/` |
+
+## Manifest Kind Handling
+
+The action auto-detects the `kind` of each manifest file and applies the appropriate update strategy:
+
+| Kind | Fields updated | Namespace handling |
+| --- | --- | --- |
+| `Deployment` | `.spec.template.spec.containers[].image`, `.metadata.namespace` | Overwritten with `namespace` input |
+| `Application` | `.spec.source.repoURL`, `.spec.source.chart`, `.spec.source.targetRevision`, `.spec.destination.namespace` | Overwritten with `namespace` input |
+| `ApplicationSet` | `.spec.template.spec.source.repoURL`, `.spec.template.spec.source.chart`, `.spec.template.spec.source.targetRevision` | **Not overwritten** — each generator element defines its own destination namespace |

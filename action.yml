@@ -1,5 +1,5 @@
 name: gha-gitops-manifest-update
-description: Iterates over YAML manifests (Kubernetes Deployment or ArgoCD Application) and updates their image/tag - also renders manifests.
+description: Iterates over YAML manifests (Kubernetes Deployment, ArgoCD Application, or ArgoCD ApplicationSet) and updates their image/tag - also renders manifests.
 
 inputs:
   #image
@@ -182,8 +182,15 @@ runs:
 
           KIND=$(yq '.kind' $MANIFEST_PATH)
           #TODO: also validate that the key variables below are not empty for helm charts
-          if [[ "$KIND" == "Application" ]]; then
-            #we are updating an ArgoCD application manifest
+          if [[ "$KIND" == "Application" || "$KIND" == "ApplicationSet" ]]; then
+            #we are updating an ArgoCD application/applicationset manifest
+
+            # ApplicationSet stores spec under .spec.template.spec
+            if [[ "$KIND" == "ApplicationSet" ]]; then
+              SPEC_PREFIX=".spec.template.spec"
+            else
+              SPEC_PREFIX=".spec"
+            fi
 
             printf "\nCHART_REGISTRY=$CHART_REGISTRY"
             printf "\nCHART_REGISTRY_USERNAME=$CHART_REGISTRY_USERNAME"
@@ -195,17 +202,20 @@ runs:
 
             #yq -i '.metadata.name=env(CHART_NAME)' $MANIFEST_PATH
 
-            yq -i '.spec.destination.namespace=env(NAMESPACE)' $MANIFEST_PATH
-            yq -i '.spec.source.repoURL=env(CHART_REGISTRY)' $MANIFEST_PATH
-            yq -i '.spec.source.chart=env(CHART_REPOSITORY)' $MANIFEST_PATH
-            yq -i '.spec.source.targetRevision=env(TAG)' $MANIFEST_PATH
+            # ApplicationSet destination namespace is per-generator element — skip overwrite
+            if [[ "$KIND" == "Application" ]]; then
+              yq -i "${SPEC_PREFIX}.destination.namespace=env(NAMESPACE)" $MANIFEST_PATH
+            fi
+            yq -i "${SPEC_PREFIX}.source.repoURL=env(CHART_REGISTRY)" $MANIFEST_PATH
+            yq -i "${SPEC_PREFIX}.source.chart=env(CHART_REPOSITORY)" $MANIFEST_PATH
+            yq -i "${SPEC_PREFIX}.source.targetRevision=env(TAG)" $MANIFEST_PATH
 
             # yq -i '.spec.source.helm.parameters[] |= select(.name == "image.repository").value=env(CHART_REPOSITORY)' $MANIFEST_PATH
             # yq -i '.spec.source.helm.parameters[] |= select(.name == "image.tag").value=env(TAG)' $MANIFEST_PATH
 
             cat $MANIFEST_PATH
 
-            yq '.spec.source.helm.valuesObject' $MANIFEST_PATH >> temp.values.yaml
+            yq "${SPEC_PREFIX}.source.helm.valuesObject" $MANIFEST_PATH >> temp.values.yaml
 
             printf "\n\n>helm registry login $CHART_REGISTRY --username $CHART_REGISTRY_USERNAME --password-stdin\n"
             printf $CHART_REGISTRY_PASSWORD | helm registry login $CHART_REGISTRY --username $CHART_REGISTRY_USERNAME --password-stdin
