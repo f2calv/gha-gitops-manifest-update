@@ -14,6 +14,7 @@ Detailed conventions live in scoped instruction files under `.github/instruction
 | File | Applies to | Covers |
 | --- | --- | --- |
 | `github-actions.instructions.md` | workflows / `action.yml` | GitHub Actions naming, YAML, security, GitVersion |
+| `bash.instructions.md` | `**/*.sh` | Bash scripting structure, error handling, logging, testability |
 | `documentation.instructions.md` | `**/*.md` | README consistency & Mermaid diagrams |
 
 The conventions below always apply, regardless of the file being edited.
@@ -23,6 +24,13 @@ The conventions below always apply, regardless of the file being edited.
 - **Test execution**: Never run tests automatically — they may be integration tests requiring extra setup. Always prompt (ideally with a visual yes/no button) before running any tests.
 - **Preserve git history during renames/moves**: When renaming or relocating files, first perform the rename/move (preferably via `git mv`), then make content edits to the file in its new location/name. This two-step approach preserves git history across the rename. Do not delete-and-recreate files when a rename or move is the intent.
 - **Multi-repo commits**: When a single change spans multiple repositories, separate per-repository commit messages are acceptable (but not mandatory). Prefer them where the changes are disconnected, or where one repository should not really "know about" the other (e.g. an app repo and a GitOps repo). A single shared commit message is fine when the change is genuinely coupled.
+
+## Public Repository Confidentiality
+
+- Treat every non-public repository's identity and contents as confidential, even when they appear in the local workspace, conversation context, diffs, logs, or tool output.
+- Never publish private repository names, URLs, owner/repository coordinates, branches, file paths, architecture, deployment details, or inferred existence in tracked files, commit messages, issues, pull request titles/descriptions/reviews/comments, release notes, workflow annotations, examples, or other public-facing content.
+- Describe required relationships generically (for example, "private GitOps repository" or "internal service") and supply private coordinates only through secrets, repository variables, or caller-provided values.
+- Before creating or updating public GitHub content, review the proposed text and metadata for private identifiers and implementation details.
 
 ## Repository Structure
 
