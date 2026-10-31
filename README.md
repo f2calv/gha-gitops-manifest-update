@@ -1,6 +1,6 @@
 # GitHub Action: GitOps Manifest Update
 
-This GitHub Action iterates over YAML manifests (Kubernetes `Deployment`, ArgoCD `Application`, or ArgoCD `ApplicationSet`) and updates their image/tag. For ArgoCD `Application` and `ApplicationSet` manifests it also pulls and renders Helm charts. It uses [yq](https://github.com/mikefarah/yq) to manipulate manifest YAML in-place and [Helm](https://helm.sh/) for chart operations. Tool versions are sourced from `.devcontainer/devcontainer.json` by default.
+This GitHub Action iterates over YAML manifests (Kubernetes `Deployment`, ArgoCD `Application`, or ArgoCD `ApplicationSet`) and updates their image/tag. For ArgoCD `Application` and `ApplicationSet` manifests it also pulls and renders the Helm chart with the manifest's values as a validation gate: a failed pull or render fails the step before anything is committed. The render is discarded and only a per-kind object count is logged. When committing, only the updated manifest paths are staged, and `devcontainer.json` is read from a temporary copy rather than rewritten. It uses [yq](https://github.com/mikefarah/yq) to manipulate manifest YAML in-place and [Helm](https://helm.sh/) for chart operations. Tool versions are sourced from `.devcontainer/devcontainer.json` by default.
 
 ## Examples
 
@@ -27,7 +27,7 @@ steps:
     namespace: dev
     git-repo-update: false
 
-# ArgoCD Application: updates targetRevision, pulls and renders Helm chart.
+# ArgoCD Application: updates targetRevision, then validates that the Helm chart renders.
 - uses: f2calv/gha-gitops-manifest-update@v2
   with:
     tag: 1.2.3

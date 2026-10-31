@@ -71,13 +71,15 @@ runs:
 
     - name: setup yq (1 of 3)
       shell: bash
+      env:
+        GIT_DIR: ${{ inputs.git-working-directory }}
+        DEVCONTAINER_INPUT: ${{ inputs.devcontainer-path }}
       run: |
-        GIT_DIR="${{ inputs.git-working-directory }}"
         GIT_DIR="${GIT_DIR%/}"
         if [[ "$GIT_DIR" != "." ]]; then
-          FILE="$GIT_DIR/${{ inputs.devcontainer-path }}"
+          FILE="$GIT_DIR/$DEVCONTAINER_INPUT"
         else
-          FILE="${{ inputs.devcontainer-path }}"
+          FILE="$DEVCONTAINER_INPUT"
         fi
         if [[ -f "$FILE" ]]; then
           echo "$FILE exists"
@@ -91,8 +93,11 @@ runs:
       shell: bash
       run: |
         npm install --global json5
-        json5 -c ${{ env.DEVCONTAINER_PATH }}
-        VERSION_TO_INSTALL=$(cat ${{ env.DEVCONTAINER_PATH }} | jq -r '.features[] | select(.yqVersion | . != null).yqVersion')
+        #Convert into a temp copy: rewriting the file in place would leave it modified in the GitOps repository.
+        DEVCONTAINER_JSON="$RUNNER_TEMP/devcontainer.json"
+        json5 "$DEVCONTAINER_PATH" > "$DEVCONTAINER_JSON"
+        echo "DEVCONTAINER_JSON=$DEVCONTAINER_JSON" >> "$GITHUB_ENV"
+        VERSION_TO_INSTALL=$(jq -r '.features[] | select(.yqVersion | . != null).yqVersion' "$DEVCONTAINER_JSON")
         echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL" >> $GITHUB_ENV
         echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL"
 
@@ -105,7 +110,7 @@ runs:
     - name: setup helm (1 of 2) #pull version from devcontainer.json
       shell: bash
       run: |
-        HELM_VERSION=$(cat ${{ env.DEVCONTAINER_PATH }} | jq -r '.features[] | select(.helm | . != null).helm')
+        HELM_VERSION=$(jq -r '.features[] | select(.helm | . != null).helm' "$DEVCONTAINER_JSON")
         echo "HELM_VERSION=$HELM_VERSION" >> $GITHUB_ENV
         echo "HELM_VERSION=$HELM_VERSION"
 
@@ -143,4 +148,5 @@ runs:
         NAMESPACE: ${{ inputs.namespace }}
         IMAGE_REPOSITORY: ${{ inputs.image-repository }}
         TAG: ${{ inputs.tag }}
+        MANIFEST_PATHS: ${{ inputs.manifest-paths }}
       run: "${{ github.action_path }}/.scripts/repo-update.sh"

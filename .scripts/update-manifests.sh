@@ -1,6 +1,8 @@
 #!/bin/bash
 # Rewrites each target manifest's image/tag/chart fields via yq. For ArgoCD
-# Application/ApplicationSet manifests, also renders the chart via `helm template`.
+# Application/ApplicationSet manifests, also renders the chart via `helm template` as a validation
+# gate: the render proves the chart version can be pulled and its values template cleanly, and is then
+# discarded. Only a per-kind summary is logged; nothing rendered is written to the GitOps repository.
 #
 # Required environment variables: MANIFEST_PATHS, TAG, IMAGE_REGISTRY, IMAGE_REPOSITORY,
 # NAMESPACE. GIT_WORKING_DIRECTORY and TAG_OVERRIDE are optional. CHART_REGISTRY,
@@ -81,7 +83,8 @@ for MANIFEST_PATH in $RESOLVED_PATHS; do
     done
 
     CHART_NAME=$(basename "$CHART_REPOSITORY")             # e.g. tickprocessor
-    MANIFEST_PATH_RENDERED="$MANIFEST_PATH.manifest"        # e.g. src/workloads/tickprocessor.yaml.manifest
+    RENDER_DIR=$(mktemp -d "${RUNNER_TEMP:-/tmp}/render.XXXXXX")
+    MANIFEST_PATH_RENDERED="$RENDER_DIR/$CHART_NAME.yaml"
 
     # ApplicationSet stores spec under .spec.template.spec
     if [[ "$KIND" == "ApplicationSet" ]]; then
@@ -95,7 +98,6 @@ for MANIFEST_PATH in $RESOLVED_PATHS; do
     echo "CHART_REGISTRY_PASSWORD=***" # Note: value redacted from logs to avoid leaking credentials
     echo "CHART_REPOSITORY=$CHART_REPOSITORY"
     echo "CHART_NAME=$CHART_NAME"
-    echo "MANIFEST_PATH_RENDERED=$MANIFEST_PATH_RENDERED"
     echo "-------------------------------------------"
 
     # ApplicationSet destination namespace is per-generator element — skip overwrite
@@ -108,7 +110,7 @@ for MANIFEST_PATH in $RESOLVED_PATHS; do
 
     cat "$MANIFEST_PATH"
 
-    yq "${SPEC_PREFIX}.source.helm.valuesObject" "$MANIFEST_PATH" >> temp.values.yaml
+    yq "${SPEC_PREFIX}.source.helm.valuesObject" "$MANIFEST_PATH" > "$RENDER_DIR/values.yaml"
 
     echo ""
     echo ">helm registry login $CHART_REGISTRY --username $CHART_REGISTRY_USERNAME --password-stdin"
@@ -116,16 +118,16 @@ for MANIFEST_PATH in $RESOLVED_PATHS; do
 
     echo ""
     echo ">helm pull oci://$CHART_REGISTRY/$CHART_REPOSITORY --version $TAG --untar"
-    helm pull "oci://$CHART_REGISTRY/$CHART_REPOSITORY" --version "$TAG" --untar --destination temp-charts
+    helm pull "oci://$CHART_REGISTRY/$CHART_REPOSITORY" --version "$TAG" --untar --destination "$RENDER_DIR/charts"
 
     echo ""
-    echo ">helm template --namespace $NAMESPACE $CHART_NAME temp-charts/$CHART_NAME --values temp.values.yaml > $MANIFEST_PATH_RENDERED"
-    helm template --namespace "$NAMESPACE" "$CHART_NAME" "temp-charts/$CHART_NAME" --values temp.values.yaml > "$MANIFEST_PATH_RENDERED"
+    echo ">helm template --namespace $NAMESPACE $CHART_NAME (validation only)"
+    helm template --namespace "$NAMESPACE" "$CHART_NAME" "$RENDER_DIR/charts/$CHART_NAME" --values "$RENDER_DIR/values.yaml" > "$MANIFEST_PATH_RENDERED"
 
-    cat "$MANIFEST_PATH_RENDERED"
+    echo "Rendered objects by kind:"
+    yq -N '.kind | select(. != null)' "$MANIFEST_PATH_RENDERED" | sort | uniq -c
 
-    # we are in a loop so do some clean up
-    rm -rf temp.values.yaml temp-charts
+    rm -rf "$RENDER_DIR"
   else
     # we are updating a regular kubernetes manifest
 
