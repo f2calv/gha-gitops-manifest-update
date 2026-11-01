@@ -69,56 +69,63 @@ runs:
   using: composite
   steps:
 
-    - name: setup yq (1 of 3)
+    #Tool versions come from the GitOps repository's devcontainer.json and are passed on as step outputs.
+    - name: read tool versions (1 of 3)
+      id: tools
       shell: bash
       env:
         GIT_DIR: ${{ inputs.git-working-directory }}
         DEVCONTAINER_INPUT: ${{ inputs.devcontainer-path }}
       run: |
+        set -euo pipefail
         GIT_DIR="${GIT_DIR%/}"
         if [[ "$GIT_DIR" != "." ]]; then
           FILE="$GIT_DIR/$DEVCONTAINER_INPUT"
         else
           FILE="$DEVCONTAINER_INPUT"
         fi
-        if [[ -f "$FILE" ]]; then
-          echo "$FILE exists"
-        else
-          echo "::error file=$FILE::yq version is managed by the devcontainer.json, '$FILE' is therefore required!"
+        if [[ ! -f "$FILE" ]]; then
+          echo "::error file=$FILE::yq and Helm versions are managed by the devcontainer.json, '$FILE' is therefore required!"
           exit 1
         fi
-        echo "DEVCONTAINER_PATH=$FILE" >> $GITHUB_ENV
-
-    - name: setup yq (2 of 3) #pull version from devcontainer.json
-      shell: bash
-      run: |
         npm install --global json5
         #Convert into a temp copy: rewriting the file in place would leave it modified in the GitOps repository.
         DEVCONTAINER_JSON="$RUNNER_TEMP/devcontainer.json"
-        json5 "$DEVCONTAINER_PATH" > "$DEVCONTAINER_JSON"
-        echo "DEVCONTAINER_JSON=$DEVCONTAINER_JSON" >> "$GITHUB_ENV"
-        VERSION_TO_INSTALL=$(jq -r '.features[] | select(.yqVersion | . != null).yqVersion' "$DEVCONTAINER_JSON")
-        echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL" >> $GITHUB_ENV
-        echo "VERSION_TO_INSTALL=$VERSION_TO_INSTALL"
-
-    - name: setup yq (3 of 3)
-      shell: bash
-      run: |
-        sudo wget https://github.com/mikefarah/yq/releases/${{ env.VERSION_TO_INSTALL }}/download/yq_linux_amd64 -O /usr/bin/yq \
-          && sudo chmod +x /usr/bin/yq
-
-    - name: setup helm (1 of 2) #pull version from devcontainer.json
-      shell: bash
-      run: |
+        json5 "$FILE" > "$DEVCONTAINER_JSON"
+        YQ_VERSION=$(jq -r '.features[] | select(.yqVersion | . != null).yqVersion' "$DEVCONTAINER_JSON")
         HELM_VERSION=$(jq -r '.features[] | select(.helm | . != null).helm' "$DEVCONTAINER_JSON")
-        echo "HELM_VERSION=$HELM_VERSION" >> $GITHUB_ENV
-        echo "HELM_VERSION=$HELM_VERSION"
+        [[ "$YQ_VERSION" =~ ^(latest|v[0-9]+(\.[0-9]+){0,2})$ ]] || { echo "::error file=$FILE::yqVersion '$YQ_VERSION' must be latest or vX.Y.Z."; exit 1; }
+        [[ "$HELM_VERSION" =~ ^(latest|v?[0-9]+(\.[0-9]+){0,2})$ ]] || { echo "::error file=$FILE::helm '$HELM_VERSION' must be latest or X.Y.Z."; exit 1; }
+        echo "yq=$YQ_VERSION helm=$HELM_VERSION"
+        {
+          echo "yq=$YQ_VERSION"
+          echo "helm=$HELM_VERSION"
+        } >> "$GITHUB_OUTPUT"
 
-    - name: setup helm (2 of 2)
+    - name: install yq (2 of 3)
+      shell: bash
+      env:
+        YQ_VERSION: ${{ steps.tools.outputs.yq }}
+      run: |
+        set -euo pipefail
+        case "$RUNNER_ARCH" in
+          X64) ARCH=amd64 ;;
+          ARM64) ARCH=arm64 ;;
+          *) echo "::error::Unsupported runner architecture $RUNNER_ARCH."; exit 1 ;;
+        esac
+        if [[ "$YQ_VERSION" == "latest" ]]; then
+          URL="https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$ARCH"
+        else
+          URL="https://github.com/mikefarah/yq/releases/download/$YQ_VERSION/yq_linux_$ARCH"
+        fi
+        sudo wget -q "$URL" -O /usr/bin/yq
+        sudo chmod +x /usr/bin/yq
+        yq --version
+
+    - name: setup helm (3 of 3)
       uses: azure/setup-helm@v5
       with:
-        version: ${{ env.HELM_VERSION }}
-
+        version: ${{ steps.tools.outputs.helm }}
     #1. update the argocd application targetRevision to reflect the new helm chart version
     #2. expand out the helm chart with new helm chart version (optional)
     - name: update manifest(s)
