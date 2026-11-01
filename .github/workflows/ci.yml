@@ -28,23 +28,11 @@ jobs:
 
   validate:
     needs: [versioning]
-    runs-on: ubuntu-24.04
+    uses: f2calv/gha-workflows/.github/workflows/readme-ref-check.yml@v1
+    with:
+      major: ${{ needs.versioning.outputs.major }}
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: README floating major tag
-        env:
-          EXPECTED_ACTION_REF: ${{ github.repository }}@v${{ needs.versioning.outputs.major }}
-        run: |
-          awk -v ref="$EXPECTED_ACTION_REF" '
-            index($0, ref) {
-              suffix = substr($0, index($0, ref) + length(ref), 1)
-              if (suffix == "" || suffix !~ /[[:alnum:]_.-]/) found = 1
-            }
-            END { exit !found }
-          ' README.md
 
   release:
     needs: [lint, versioning, validate]
